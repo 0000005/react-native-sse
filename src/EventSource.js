@@ -19,6 +19,7 @@ class EventSource {
   constructor(url, options = {}) {
     this.lastEventId = null;
     this.status = this.CONNECTING;
+    _idleTimeoutId = null;
 
     this.eventHandlers = {
       open: [],
@@ -28,7 +29,8 @@ class EventSource {
     };
 
     this.method = options.method || 'GET';
-    this.timeout = options.timeout ?? 0;
+    this.connectTimeout = options.connectTimeout ?? 0;
+    this.idleTimeout = options.idleTimeout ?? 0;
     this.timeoutBeforeConnection = options.timeoutBeforeConnection ?? 500;
     this.withCredentials = options.withCredentials || false;
     this.headers = options.headers || {};
@@ -40,6 +42,7 @@ class EventSource {
     this._xhr = null;
     this._pollTimer = null;
     this._lastIndexProcessed = 0;
+    
 
     if (!url || (typeof url !== 'string' && typeof url.toString !== 'function')) {
       throw new SyntaxError('[EventSource] Invalid URL argument.');
@@ -89,8 +92,6 @@ class EventSource {
       if (this.lastEventId !== null) {
         this._xhr.setRequestHeader('Last-Event-ID', this.lastEventId);
       }
-
-      this._xhr.timeout = this.timeout;
 
       this._xhr.onreadystatechange = () => {
         if (this.status === this.CLOSED) {
@@ -153,14 +154,13 @@ class EventSource {
       } else {
         this._xhr.send();
       }
-
-      if (this.timeout > 0) {
+      if (this.connectTimeout > 0) {
         setTimeout(() => {
-          if (this._xhr.readyState === XMLHttpRequest.LOADING) {
-            this.dispatch('error', { type: 'timeout' });
+          if (this._xhr.readyState == XMLHttpRequest.OPENED){
+            this.dispatch('error', { type: 'connectTimeout','state': this._xhr.readyState });
             this.close();
           }
-        }, this.timeout);
+        }, this.connectTimeout);
       }
     } catch (e) {
       this.status = this.ERROR;
@@ -231,11 +231,21 @@ class EventSource {
             url: this.url,
             lastEventId: this.lastEventId,
           };
-
+          
           this.dispatch(eventType, event);
 
           data = [];
           type = undefined;
+
+          if(this.idleTimeout>0){
+            clearTimeout(this._idleTimeoutId);
+            this._idleTimeoutId = setTimeout(() => {
+              if (this._xhr.readyState !== XMLHttpRequest.DONE) {
+                this.dispatch('error', { type: 'idleTimeout' });
+                this.close();
+              }
+            }, this.idleTimeout);
+          }
         }
       }
     }

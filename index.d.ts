@@ -42,7 +42,8 @@ export interface ExceptionEvent {
 
 export interface EventSourceOptions {
   method?: string;
-  timeout?: number;
+  idelTimeout?: number;
+  connectTimeout?: number;
   timeoutBeforeConnection?: number;
   withCredentials?: boolean;
   headers?: Record<string, any>;
